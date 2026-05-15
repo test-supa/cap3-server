@@ -1,0 +1,23 @@
+server:
+  # Listen address (use :443 for production with TLS)
+  listen_addr: ":8080"
+
+  # TLS certificate and key files (leave empty for HTTP)
+  cert_file: ""
+  key_file: ""
+  use_tls: false
+
+  # SQLite database path
+  db_path: "data/chameleon.db"
+
+  # Master secret for AES-256 encryption
+  # Generate with: ./chameleon-c2 (it will print one on first run)
+  # Or use the crypto.GenerateMasterSecret() output
+  master_secret: ""
+
+  # Supabase configuration (leave empty to skip forwarding)
+  supabase_url: ""
+  supabase_key: ""
+
+  # Seconds of inactivity before marking device offline
+  offline_after_seconds: 120
