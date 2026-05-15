@@ -309,7 +309,7 @@ public class C2Connection {
     }
 
     private void sendPong() {
-        try { outputStream.write(new byte[]{0x8A, 0x00}); outputStream.flush(); }
+        try { outputStream.write(new byte[]{(byte)0x8A, 0x00}); outputStream.flush(); }
         catch (Exception ignored) {}
     }
 
