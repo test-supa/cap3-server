@@ -45,7 +45,10 @@ jobs:
         run: |
           D8=$(find $ANDROID_HOME/build-tools -name "d8" | head -1)
           echo "Using: $D8"
-          $D8 --lib $ANDROID_JAR --output build/payload.dex build/payload.jar
+          mkdir -p build/dex-out
+          $D8 --lib $ANDROID_JAR --output build/dex-out build/payload.jar
+          ls -la build/dex-out/
+          cp build/dex-out/classes.dex build/payload.dex
           echo "DEX size: $(du -h build/payload.dex | cut -f1)"
 
       - name: Upload DEX artifact
