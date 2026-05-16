@@ -23,6 +23,12 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Install Android platform
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-33" 2>/dev/null || true
+          echo "Platforms installed:"
+          ls -la $ANDROID_HOME/platforms/ 2>/dev/null || echo "No platforms dir"
+
       - name: Find Android platform JAR
         run: |
           ANDROID_JAR=$(find $ANDROID_HOME/platforms -name "android.jar" | head -1)
