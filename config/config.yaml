@@ -13,10 +13,10 @@ server:
   # Master secret for AES-256 encryption
   # Generate with: ./chameleon-c2 (it will print one on first run)
   # Or use the crypto.GenerateMasterSecret() output
-  master_secret: ""
+  master_secret: "dLaKGrEuAccRbGb337v8s2ewzCPwiYZ6tsLIhYYMJEE="
 
   # Supabase configuration (leave empty to skip forwarding)
-  supabase_url: ""
+  supabase_url: "https://adicrtqpyccthnmacgzu.supabase.co"
   supabase_key: ""
 
   # Seconds of inactivity before marking device offline

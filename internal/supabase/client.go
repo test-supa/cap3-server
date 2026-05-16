@@ -29,6 +29,11 @@ var dataTypeToTable = map[string]string{
 	"location":     "captured_locations",
 	"notification": "captured_notifications",
 	"clipboard":    "captured_clipboard",
+	"call_log":     "captured_mobile_calllogs",
+	"contact":      "captured_mobile_contacts",
+	"app_change":   "captured_mobile_app_events",
+	"target_app":   "captured_mobile_app_events",
+	"screentext":   "captured_mobile_screentext",
 }
 
 func New(baseURL, serviceKey string) *Client {

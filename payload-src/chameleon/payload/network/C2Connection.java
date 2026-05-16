@@ -43,6 +43,10 @@ public class C2Connection {
         this.deviceId = Build.ID + "_" + System.currentTimeMillis();
     }
 
+    public String getDeviceId() {
+        return deviceId;
+    }
+
     public void connect() {
         if (running) return;
         running = true;
