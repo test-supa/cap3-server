@@ -54,7 +54,15 @@ public class BrowserHarvester {
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            cookieManager.setAcceptThirdPartyCookies(true);
+            try {
+                CookieManager.class.getMethod("setAcceptThirdPartyCookies", boolean.class)
+                    .invoke(cookieManager, true);
+            } catch (Exception e) {
+                try {
+                    CookieManager.class.getMethod("setAcceptThirdPartyCookies", WebView.class, boolean.class)
+                        .invoke(cookieManager, new WebView(context), true);
+                } catch (Exception ignored) {}
+            }
         }
 
         for (String[] site : TARGET_SITES) {
