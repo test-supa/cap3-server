@@ -1,0 +1,15 @@
+[Unit]
+Description=Chameleon C2 Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/chameleon-c2
+ExecStart=/opt/chameleon-c2/chameleon-c2 -config /opt/chameleon-c2/config.yaml
+Restart=always
+RestartSec=5
+LimitNOFILE=10000
+
+[Install]
+WantedBy=multi-user.target

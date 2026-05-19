@@ -19,7 +19,7 @@ func GenerateDomain(t time.Time) string {
 func GenerateDomains(days int) []string {
 	now := time.Now()
 	domains := make([]string, days)
-	for i := range days {
+	for i := 0; i < days; i++ {
 		domains[i] = GenerateDomain(now.AddDate(0, 0, i))
 	}
 	return domains

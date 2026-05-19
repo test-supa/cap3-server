@@ -19,11 +19,13 @@ const (
 )
 
 type Client struct {
-	DeviceID string
-	Conn     *websocket.Conn
-	Server   *Server
-	mu       sync.Mutex
-	done     chan struct{}
+	DeviceID   string
+	Conn       *websocket.Conn
+	Server     *Server
+	mu         sync.Mutex
+	done       chan struct{}
+	IsAdmin    bool
+	StreamFor  string // device_id this admin is streaming
 }
 
 func NewClient(conn *websocket.Conn, srv *Server) *Client {
@@ -37,6 +39,12 @@ func NewClient(conn *websocket.Conn, srv *Server) *Client {
 		conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
 	})
+	return c
+}
+
+func NewAdminClient(conn *websocket.Conn, srv *Server) *Client {
+	c := NewClient(conn, srv)
+	c.IsAdmin = true
 	return c
 }
 
@@ -56,6 +64,13 @@ func (c *Client) SendMessage(msg types.WSMessage) error {
 
 	c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 	return c.Conn.WriteMessage(websocket.TextMessage, data)
+}
+
+func (c *Client) SendBinary(data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+	return c.Conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
 func (c *Client) SendCommand(cmd types.CommandMessage) error {
@@ -78,6 +93,9 @@ func (c *Client) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.IsAdmin && c.StreamFor != "" {
+		c.Server.adminHub.UnregisterViewer(c.StreamFor, c)
+	}
 	if c.DeviceID != "" {
 		c.Server.hub.Unregister(c.DeviceID)
 		c.Server.db.SetDeviceOffline(c.DeviceID)
@@ -117,12 +135,18 @@ func (c *Client) readPump() {
 			return
 		default:
 			c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-			_, message, err := c.Conn.ReadMessage()
+			msgType, message, err := c.Conn.ReadMessage()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 					log.Printf("ws read error from %s: %v", c.DeviceID, err)
 				}
 				return
+			}
+
+			if msgType == websocket.BinaryMessage {
+				// Binary frame from device — likely a stream frame
+				c.Server.handleBinaryFrame(c, message)
+				continue
 			}
 
 			var msg types.WSMessage
@@ -136,6 +160,7 @@ func (c *Client) readPump() {
 	}
 }
 
+// ─── DEVICE HUB ────────────────────────────────────────────────────
 type Hub struct {
 	mu      sync.RWMutex
 	clients map[string]*Client // deviceID -> client
@@ -203,4 +228,52 @@ func (h *Hub) ConnectedDeviceIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// ─── ADMIN HUB (Browser viewers) ────────────────────────────────────
+type AdminHub struct {
+	mu       sync.RWMutex
+	viewers  map[string][]*Client // deviceID -> admin clients viewing it
+}
+
+func NewAdminHub() *AdminHub {
+	return &AdminHub{
+		viewers: make(map[string][]*Client),
+	}
+}
+
+func (ah *AdminHub) RegisterViewer(deviceID string, client *Client) {
+	ah.mu.Lock()
+	defer ah.mu.Unlock()
+	client.StreamFor = deviceID
+	ah.viewers[deviceID] = append(ah.viewers[deviceID], client)
+}
+
+func (ah *AdminHub) UnregisterViewer(deviceID string, client *Client) {
+	ah.mu.Lock()
+	defer ah.mu.Unlock()
+	viewers := ah.viewers[deviceID]
+	for i, v := range viewers {
+		if v == client {
+			ah.viewers[deviceID] = append(viewers[:i], viewers[i+1:]...)
+			break
+		}
+	}
+	if len(ah.viewers[deviceID]) == 0 {
+		delete(ah.viewers, deviceID)
+	}
+}
+
+func (ah *AdminHub) BroadcastFrame(deviceID string, frameData []byte) {
+	ah.mu.RLock()
+	defer ah.mu.RUnlock()
+	for _, viewer := range ah.viewers[deviceID] {
+		viewer.SendBinary(frameData)
+	}
+}
+
+func (ah *AdminHub) ViewerCount(deviceID string) int {
+	ah.mu.RLock()
+	defer ah.mu.RUnlock()
+	return len(ah.viewers[deviceID])
 }

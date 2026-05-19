@@ -18,8 +18,29 @@ func (s *Server) handleMessage(client *Client, msg types.WSMessage) {
 		s.handleData(client, msg)
 	case types.MsgCommandAck:
 		s.handleCommandAck(client, msg)
+	case types.MsgScreenState:
+		s.handleScreenState(client, msg)
 	default:
 		log.Printf("unknown message type from %s: %s", client.DeviceID, msg.Type)
+	}
+}
+
+func (s *Server) handleBinaryFrame(client *Client, data []byte) {
+	if client.DeviceID == "" {
+		log.Printf("binary frame from unregistered device")
+		return
+	}
+	// Binary frames are stream JPEGs — relay to admin viewers
+	s.adminHub.BroadcastFrame(client.DeviceID, data)
+}
+
+func (s *Server) handleScreenState(client *Client, msg types.WSMessage) {
+	var state types.ScreenStateData
+	if err := json.Unmarshal(msg.Data, &state); err != nil {
+		return
+	}
+	if err := s.db.UpdateScreenState(client.DeviceID, state.State); err != nil {
+		log.Printf("screen state update failed for %s: %v", client.DeviceID, err)
 	}
 }
 

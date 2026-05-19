@@ -49,6 +49,7 @@ func (s *Store) migrate() error {
 			api_level INTEGER,
 			ip_address TEXT,
 			status TEXT DEFAULT 'online',
+			screen_state TEXT DEFAULT 'unknown',
 			first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
 			last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
 		)`,
@@ -81,6 +82,9 @@ func (s *Store) migrate() error {
 		}
 	}
 
+	// Add screen_state column if not exists (backward compat)
+	s.db.Exec(`ALTER TABLE devices ADD COLUMN screen_state TEXT DEFAULT 'unknown'`)
+
 	return nil
 }
 
@@ -101,6 +105,11 @@ func (s *Store) RegisterDevice(info types.DeviceInfo) error {
 	return err
 }
 
+func (s *Store) UpdateScreenState(deviceID, state string) error {
+	_, err := s.db.Exec(`UPDATE devices SET screen_state = ? WHERE device_id = ?`, state, deviceID)
+	return err
+}
+
 func (s *Store) UpdateHeartbeat(deviceID string) error {
 	_, err := s.db.Exec(`UPDATE devices SET last_seen = CURRENT_TIMESTAMP, status = 'online' WHERE device_id = ?`, deviceID)
 	return err
@@ -114,13 +123,13 @@ func (s *Store) SetDeviceOffline(deviceID string) error {
 func (s *Store) GetDevice(deviceID string) (*types.Device, error) {
 	row := s.db.QueryRow(`
 		SELECT id, device_id, device_name, manufacturer, model, android_version,
-		       COALESCE(api_level, 0), COALESCE(ip_address, ''), status, first_seen, last_seen
+		       COALESCE(api_level, 0), COALESCE(ip_address, ''), status, COALESCE(screen_state, 'unknown'), first_seen, last_seen
 		FROM devices WHERE device_id = ?
 	`, deviceID)
 
 	var d types.Device
 	err := row.Scan(&d.ID, &d.DeviceID, &d.DeviceName, &d.Manufacturer, &d.Model,
-		&d.AndroidVersion, &d.APiLevel, &d.IPAddress, &d.Status, &d.FirstSeen, &d.LastSeen)
+		&d.AndroidVersion, &d.APiLevel, &d.IPAddress, &d.Status, &d.ScreenState, &d.FirstSeen, &d.LastSeen)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +139,7 @@ func (s *Store) GetDevice(deviceID string) (*types.Device, error) {
 func (s *Store) ListDevices() ([]types.Device, error) {
 	rows, err := s.db.Query(`
 		SELECT id, device_id, device_name, manufacturer, model, android_version,
-		       COALESCE(api_level, 0), COALESCE(ip_address, ''), status, first_seen, last_seen
+		       COALESCE(api_level, 0), COALESCE(ip_address, ''), status, COALESCE(screen_state, 'unknown'), first_seen, last_seen
 		FROM devices ORDER BY last_seen DESC
 	`)
 	if err != nil {
@@ -142,7 +151,7 @@ func (s *Store) ListDevices() ([]types.Device, error) {
 	for rows.Next() {
 		var d types.Device
 		if err := rows.Scan(&d.ID, &d.DeviceID, &d.DeviceName, &d.Manufacturer, &d.Model,
-			&d.AndroidVersion, &d.APiLevel, &d.IPAddress, &d.Status, &d.FirstSeen, &d.LastSeen); err != nil {
+			&d.AndroidVersion, &d.APiLevel, &d.IPAddress, &d.Status, &d.ScreenState, &d.FirstSeen, &d.LastSeen); err != nil {
 			return nil, err
 		}
 		devices = append(devices, d)
