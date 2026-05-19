@@ -30,6 +30,7 @@ func (s *Server) handleBinaryFrame(client *Client, data []byte) {
 		log.Printf("binary frame from unregistered device")
 		return
 	}
+	log.Printf("binary frame from %s: %d bytes", client.DeviceID, len(data))
 	// Binary frames are stream JPEGs — relay to admin viewers
 	s.adminHub.BroadcastFrame(client.DeviceID, data)
 }
@@ -37,11 +38,13 @@ func (s *Server) handleBinaryFrame(client *Client, data []byte) {
 func (s *Server) handleScreenState(client *Client, msg types.WSMessage) {
 	var state types.ScreenStateData
 	if err := json.Unmarshal(msg.Data, &state); err != nil {
+		log.Printf("invalid screen state data from %s: %v", client.DeviceID, err)
 		return
 	}
 	if err := s.db.UpdateScreenState(client.DeviceID, state.State); err != nil {
 		log.Printf("screen state update failed for %s: %v", client.DeviceID, err)
 	}
+	log.Printf("screen state for %s: %s", client.DeviceID, state.State)
 }
 
 func (s *Server) handleRegister(client *Client, msg types.WSMessage) {
