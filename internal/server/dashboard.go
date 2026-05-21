@@ -201,9 +201,9 @@ function connectWS() {
                     lastFrameTime = now;
                     frameInfo.textContent = ' | Frames: ' + frameCount + ' | FPS: ' + fps;
                 };
-                img.src = reader.result;
+                img.src = URL.createObjectURL(new Blob([reader.result], {type: 'image/jpeg'}));
             };
-            reader.readAsDataURL(e.data);
+            reader.readAsArrayBuffer(e.data);
         } else {
             try {
                 const msg = JSON.parse(e.data);
